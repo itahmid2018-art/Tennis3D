@@ -1,0 +1,695 @@
+import { renderAllHudMiiAvatars as P, renderMiiAvatar as L } from "./mii_avatars.js";
+
+export class HudUI {
+  constructor(t = {}) {
+    this.callbacks = t;
+    this.bannerTimer = null;
+    this.timingPopupTimer = null;
+    this.skillHistory = [980, 1005, 1030, 1065, 1120];
+    this.selectedGamesToWin = 2;
+    this.selectedInputMode = "mouse";
+    this.selectedDifficulty = "casual";
+    this.currentRoomId = "default";
+    this.currentTunnelUrl = window.location.origin;
+
+    // Racket style default state
+    this.racketStyle = {
+      frameColor: "#0072d6",
+      finish: "metallic",
+      stringColor: "#ffffff",
+      gripColor: "#ffffff"
+    };
+    try {
+      const saved = localStorage.getItem("argon_racket_style");
+      if (saved) this.racketStyle = { ...this.racketStyle, ...JSON.parse(saved) };
+    } catch {}
+
+    // DOM Elements
+    this.elTitleModal = document.getElementById("title-modal");
+    this.elCompanionModal = document.getElementById("companion-modal");
+    this.elVictoryModal = document.getElementById("victory-modal");
+    this.elRacketModal = document.getElementById("racket-modal");
+    this.elAudioModal = document.getElementById("audio-settings-modal");
+    this.elScoreCenter = document.getElementById("score-center-display");
+    this.elScorePlayer = document.getElementById("score-player-text");
+    this.elScoreSep = document.getElementById("score-separator");
+    this.elScoreOpponent = document.getElementById("score-opponent-text");
+    this.elGamesPlayer = document.getElementById("games-pill-player");
+    this.elGamesOpponent = document.getElementById("games-pill-opponent");
+    this.elServerTag = document.getElementById("server-tag");
+    this.elPlayerNameplate = document.getElementById("player-nameplate");
+    this.elTimingPopup = document.getElementById("timing-popup");
+    this.elTimingGrade = document.getElementById("timing-popup-grade");
+    this.elTimingDetail = document.getElementById("timing-popup-detail");
+    this.elBannerLayer = document.getElementById("center-banner-layer");
+    this.elBannerText = document.getElementById("center-banner-text");
+    this.elBannerSub = document.getElementById("center-banner-sub");
+    this.elReplayBadge = document.getElementById("replay-badge");
+    this.elTimingCursor = document.getElementById("timing-cursor");
+    this.elGaugeModeTitle = document.getElementById("gauge-mode-title");
+    this.elGaugeSpeedReadout = document.getElementById("gauge-speed-readout");
+    this.elAudioDot = document.getElementById("audio-status-dot");
+    this.elAudioLabel = document.getElementById("audio-track-label");
+    this.elCameraLabel = document.getElementById("camera-mode-label");
+    this.elWebcamPip = document.getElementById("webcam-pip-card");
+    this.elWebcamDot = document.getElementById("webcam-status-dot");
+    this.elPhoneDot = document.getElementById("phone-status-dot");
+    this.elPhoneLabel = document.getElementById("phone-status-label");
+    this.elOpponentPresencePill = document.getElementById("opponent-presence-pill");
+    this.elOpponentPresenceText = document.getElementById("opponent-presence-text");
+
+    // Replay Timeline elements
+    this.elReplayTimeline = document.getElementById("replay-timeline-container");
+    this.elReplayPlayPauseIcon = document.getElementById("replay-playpause-icon");
+    this.elReplayTimeDisplay = document.getElementById("replay-time-display");
+    this.elReplaySlider = document.getElementById("replay-timeline-slider");
+    this.elReplayTrackFill = document.getElementById("replay-timeline-fill");
+    this.elReplayMarkers = document.getElementById("replay-timeline-markers");
+
+    this._lastRoomStatus = {};
+    this._lastOtherReady = !1;
+    this._justJoinedTimer = null;
+
+    this._renderAllMiiPortraits();
+    this._bindEvents();
+    this._bindRacketEvents();
+    this._bindReplayTimelineEvents();
+    this._bindAudioSettingsEvents();
+    this._initUrlParamsState();
+  }
+
+  _renderAllMiiPortraits() { P(); }
+  _drawMiiFace(t, n = {}) { L(t, n.characterId || t?.id || "player1", n); }
+
+  _initUrlParamsState() {
+    const t = new URLSearchParams(window.location.search),
+      n = (t.get("room") || "").trim().toUpperCase(),
+      e = (t.get("role") || "p1").trim().toLowerCase() === "p2" ? "p2" : "p1",
+      i = (t.get("mode") || t.get("difficulty") || "").toLowerCase();
+    if (this.playerRole = e, n && n !== "DEFAULT" ? (this.currentRoomId = n, this._setDifficultySelection("1v1", { notify: !1 })) : ["casual", "pro", "1v1"].includes(i) && this._setDifficultySelection(i, { notify: !1 }), e === "p2") {
+      const o = document.querySelector(".you-tag");
+      o && (o.textContent = "Player 1");
+      const s = document.getElementById("setup-opponent-label");
+      s && (s.textContent = "You");
+    }
+    this.updateMultiplayerRoomInfo({ roomId: this.currentRoomId, tunnelUrl: this.currentTunnelUrl, role: this.playerRole });
+  }
+
+  _setDifficultySelection(t, { notify: n = !0 } = {}) {
+    const e = ["casual", "pro", "1v1"].includes(t) ? t : "casual";
+    this.selectedDifficulty = e, document.querySelectorAll("#difficulty-mode-group .wii-green-choice").forEach(a => {
+      a.classList.toggle("selected", a.dataset.difficulty === e);
+    });
+    const o = document.getElementById("match-length-section");
+    if (e === "1v1") o && o.classList.add("hidden"), this.selectedGamesToWin = 1, this.configureGameBubbles(1), n && this.callbacks.onSelectMatchLength && this.callbacks.onSelectMatchLength(1);
+    else {
+      o && o.classList.remove("hidden");
+      const a = document.querySelector("#match-length-group .wii-green-choice.selected"),
+        r = parseInt(a?.dataset?.games || "3", 10);
+      this.selectedGamesToWin = Math.ceil(r / 2), this.configureGameBubbles(this.selectedGamesToWin), n && this.callbacks.onSelectMatchLength && this.callbacks.onSelectMatchLength(this.selectedGamesToWin);
+    }
+    const s = document.getElementById("setup-opponent-label");
+    s && this.playerRole !== "p2" && (e === "1v1" ? s.textContent = "Player 2" : e === "pro" ? s.textContent = "Matt" : s.textContent = "Club AI"), this.updateOpponentPresence(this._lastRoomStatus || {}), n && this.callbacks.onSelectDifficulty && this.callbacks.onSelectDifficulty(e);
+  }
+
+  _bindEvents() {
+    document.querySelectorAll("#difficulty-mode-group .wii-green-choice").forEach(l => {
+      l.addEventListener("click", () => {
+        const c = l.dataset.difficulty || "casual";
+        this._setDifficultySelection(c, { notify: !0 });
+      });
+    });
+    const n = document.querySelectorAll("#match-length-group .wii-green-choice");
+    n.forEach(l => {
+      l.addEventListener("click", () => {
+        n.forEach(u => u.classList.remove("selected")), l.classList.add("selected");
+        const c = parseInt(l.dataset.games || "3", 10);
+        this.selectedGamesToWin = Math.ceil(c / 2), this.configureGameBubbles(this.selectedGamesToWin), this.callbacks.onSelectMatchLength && this.callbacks.onSelectMatchLength(this.selectedGamesToWin);
+      });
+    });
+    const i = document.getElementById("btn-start-match");
+    i && i.addEventListener("click", () => {
+      this.hideTitleModal();
+      this.callbacks.onStartMatch && this.callbacks.onStartMatch({ gamesToWin: this.selectedGamesToWin, inputMode: this.selectedInputMode, difficulty: this.selectedDifficulty });
+    });
+    const o = document.getElementById("btn-audio-toggle");
+    o && o.addEventListener("click", l => { l.stopPropagation(); this.callbacks.onToggleAudio && this.callbacks.onToggleAudio(); });
+    const s = document.getElementById("btn-camera-cycle");
+    s && s.addEventListener("click", l => { l.stopPropagation(); this.callbacks.onCycleCamera && this.callbacks.onCycleCamera(); });
+    const a = document.getElementById("btn-replay-trigger");
+    a && a.addEventListener("click", l => { l.stopPropagation(); this.callbacks.onToggleReplay && this.callbacks.onToggleReplay(); });
+    const r = document.getElementById("btn-webcam-toggle");
+    r && r.addEventListener("click", l => { l.stopPropagation(); this.callbacks.onToggleWebcam && this.callbacks.onToggleWebcam(); });
+    const m = document.getElementById("btn-phone-racket");
+    m && m.addEventListener("click", l => { l.stopPropagation(); this.openMultiplayerModal(); });
+    const p = document.getElementById("btn-multiplayer-modal");
+    p && p.addEventListener("click", l => { l.stopPropagation(); this.openMultiplayerModal(); });
+    const b = document.getElementById("btn-close-companion");
+    b && b.addEventListener("click", () => { this.elCompanionModal && this.elCompanionModal.classList.add("hidden"); });
+    const B = document.getElementById("btn-play-again");
+    B && B.addEventListener("click", () => { this.hideVictoryModal(); this.callbacks.onPlayAgain && this.callbacks.onPlayAgain(); });
+    const T = document.getElementById("btn-return-title");
+    T && T.addEventListener("click", () => { this.hideVictoryModal(); this.showTitleModal(); });
+  }
+
+  // --- Racket Workshop UI Methods ---
+  _bindRacketEvents() {
+    const btnHud = document.getElementById("btn-racket-modal");
+    const btnTitle = document.getElementById("btn-title-customize-racket");
+    const btnClose = document.getElementById("btn-close-racket-modal");
+    const btnSave = document.getElementById("btn-save-racket");
+
+    if (btnHud) btnHud.addEventListener("click", e => { e.stopPropagation(); this.openRacketModal(); });
+    if (btnTitle) btnTitle.addEventListener("click", e => { e.stopPropagation(); this.openRacketModal(); });
+    if (btnClose) btnClose.addEventListener("click", () => this.closeRacketModal());
+    if (btnSave) btnSave.addEventListener("click", () => {
+      try { localStorage.setItem("argon_racket_style", JSON.stringify(this.racketStyle)); } catch {}
+      if (this.callbacks.onSaveRacketStyle) this.callbacks.onSaveRacketStyle(this.racketStyle);
+      this.closeRacketModal();
+    });
+
+    // Preset buttons
+    document.querySelectorAll(".racket-preset-btn").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const presetKey = btn.dataset.preset;
+        const presets = {
+          pro_cyan: { frameColor: "#00e5ff", finish: "metallic", stringColor: "#ffffff", gripColor: "#111111" },
+          crimson_flame: { frameColor: "#ff3344", finish: "stripes", stringColor: "#ffea19", gripColor: "#ffffff" },
+          carbon_stealth: { frameColor: "#1a1a24", finish: "carbon", stringColor: "#ffffff", gripColor: "#111111" },
+          golden_voltage: { frameColor: "#ffea19", finish: "metallic", stringColor: "#ffea19", gripColor: "#ffea19" },
+          violet_dusk: { frameColor: "#8a2be2", finish: "metallic", stringColor: "#ff007f", gripColor: "#ffffff" }
+        };
+        if (presets[presetKey]) {
+          this.racketStyle = { ...presets[presetKey] };
+          this._syncRacketSwatchesUI();
+          this._updateRacketVectorPreview();
+          if (this.callbacks.onSaveRacketStyle) this.callbacks.onSaveRacketStyle(this.racketStyle);
+        }
+      });
+    });
+
+    // Swatches
+    const bindSwatches = (containerId, styleProp) => {
+      const container = document.getElementById(containerId);
+      if (!container) return;
+      container.querySelectorAll(".swatch-btn").forEach(swatch => {
+        swatch.addEventListener("click", () => {
+          this.racketStyle[styleProp] = swatch.dataset.color;
+          container.querySelectorAll(".swatch-btn").forEach(s => s.classList.remove("selected"));
+          swatch.classList.add("selected");
+          this._updateRacketVectorPreview();
+          if (this.callbacks.onSaveRacketStyle) this.callbacks.onSaveRacketStyle(this.racketStyle);
+        });
+      });
+    };
+
+    bindSwatches("frame-color-swatches", "frameColor");
+    bindSwatches("string-color-swatches", "stringColor");
+    bindSwatches("grip-color-swatches", "gripColor");
+
+    // Finish buttons
+    const finishRow = document.getElementById("finish-mode-group");
+    if (finishRow) {
+      finishRow.querySelectorAll(".finish-choice").forEach(btn => {
+        btn.addEventListener("click", () => {
+          finishRow.querySelectorAll(".finish-choice").forEach(b => b.classList.remove("selected"));
+          btn.classList.add("selected");
+          this.racketStyle.finish = btn.dataset.finish || "metallic";
+          this._updateRacketVectorPreview();
+          if (this.callbacks.onSaveRacketStyle) this.callbacks.onSaveRacketStyle(this.racketStyle);
+        });
+      });
+    }
+  }
+
+  openRacketModal() {
+    this._syncRacketSwatchesUI();
+    this._updateRacketVectorPreview();
+    if (this.elRacketModal) this.elRacketModal.classList.remove("hidden");
+  }
+
+  closeRacketModal() {
+    if (this.elRacketModal) this.elRacketModal.classList.add("hidden");
+  }
+
+  _syncRacketSwatchesUI() {
+    const syncGroup = (containerId, styleProp) => {
+      const container = document.getElementById(containerId);
+      if (!container) return;
+      const targetVal = (this.racketStyle[styleProp] || "").toLowerCase();
+      container.querySelectorAll(".swatch-btn").forEach(swatch => {
+        const c = (swatch.dataset.color || "").toLowerCase();
+        swatch.classList.toggle("selected", c === targetVal);
+      });
+    };
+    syncGroup("frame-color-swatches", "frameColor");
+    syncGroup("string-color-swatches", "stringColor");
+    syncGroup("grip-color-swatches", "gripColor");
+
+    const finishRow = document.getElementById("finish-mode-group");
+    if (finishRow) {
+      const targetFin = this.racketStyle.finish || "metallic";
+      finishRow.querySelectorAll(".finish-choice").forEach(b => {
+        b.classList.toggle("selected", b.dataset.finish === targetFin);
+      });
+    }
+  }
+
+  _updateRacketVectorPreview() {
+    const elFrame = document.getElementById("racket-svg-frame");
+    const elThroat = document.getElementById("racket-svg-throat");
+    const elGrip = document.getElementById("racket-svg-grip");
+    const elStrings = document.getElementById("racket-svg-strings");
+
+    if (elFrame) elFrame.setAttribute("stroke", this.racketStyle.frameColor || "#0072d6");
+    if (elThroat) elThroat.setAttribute("stroke", this.racketStyle.frameColor || "#0072d6");
+    if (elGrip) elGrip.setAttribute("fill", this.racketStyle.gripColor || "#ffffff");
+    if (elStrings) elStrings.setAttribute("stroke", this.racketStyle.stringColor || "#ffffff");
+  }
+
+  // --- Audio Settings & Court Surface UI Methods ---
+  _bindAudioSettingsEvents() {
+    const btnHud = document.getElementById("btn-audio-settings");
+    const btnClose = document.getElementById("btn-close-audio-modal");
+
+    if (btnHud) btnHud.addEventListener("click", e => { e.stopPropagation(); this.openAudioModal(); });
+    if (btnClose) btnClose.addEventListener("click", () => this.closeAudioModal());
+
+    // Court Surface selection
+    document.querySelectorAll("#court-surface-group .surface-choice").forEach(btn => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll("#court-surface-group .surface-choice").forEach(b => b.classList.remove("selected"));
+        btn.classList.add("selected");
+        const surf = btn.dataset.surface || "grass";
+        if (this.callbacks.onSetCourtSurface) this.callbacks.onSetCourtSurface(surf);
+      });
+    });
+
+    // Master Mute Toggle
+    const btnMaster = document.getElementById("btn-master-mute-toggle");
+    if (btnMaster) btnMaster.addEventListener("click", () => {
+      if (this.callbacks.onToggleMasterMute) this.callbacks.onToggleMasterMute();
+    });
+
+    // Music Mute Toggle
+    const btnMusic = document.getElementById("btn-music-mute-toggle");
+    if (btnMusic) btnMusic.addEventListener("click", () => {
+      if (this.callbacks.onToggleMusicMute) this.callbacks.onToggleMusicMute();
+    });
+
+    // SFX Mute Toggle
+    const btnSfx = document.getElementById("btn-sfx-mute-toggle");
+    if (btnSfx) btnSfx.addEventListener("click", () => {
+      if (this.callbacks.onToggleSfxMute) this.callbacks.onToggleSfxMute();
+    });
+
+    // Music Volume Slider
+    const sliderMusic = document.getElementById("slider-music-volume");
+    if (sliderMusic) {
+      const onMusicInput = () => {
+        const val = parseFloat(sliderMusic.value || "0.65");
+        const txt = document.getElementById("music-volume-text");
+        if (txt) txt.textContent = `${Math.round(val * 100)}%`;
+        if (this.callbacks.onSetMusicVolume) this.callbacks.onSetMusicVolume(val);
+      };
+      sliderMusic.addEventListener("input", onMusicInput);
+      sliderMusic.addEventListener("change", onMusicInput);
+    }
+
+    // SFX Volume Slider
+    const sliderSfx = document.getElementById("slider-sfx-volume");
+    if (sliderSfx) {
+      const onSfxInput = () => {
+        const val = parseFloat(sliderSfx.value || "0.85");
+        const txt = document.getElementById("sfx-volume-text");
+        if (txt) txt.textContent = `${Math.round(val * 100)}%`;
+        if (this.callbacks.onSetSfxVolume) this.callbacks.onSetSfxVolume(val);
+      };
+      sliderSfx.addEventListener("input", onSfxInput);
+      sliderSfx.addEventListener("change", onSfxInput);
+    }
+  }
+
+  openAudioModal() {
+    if (this.elAudioModal) this.elAudioModal.classList.remove("hidden");
+  }
+
+  closeAudioModal() {
+    if (this.elAudioModal) this.elAudioModal.classList.add("hidden");
+  }
+
+  updateAudioSettingsUI(state = {}) {
+    const { surface = "grass", masterMuted = false, musicMuted = false, sfxMuted = false, musicVolume = 0.65, sfxVolume = 0.85 } = state;
+
+    document.querySelectorAll("#court-surface-group .surface-choice").forEach(btn => {
+      btn.classList.toggle("selected", btn.dataset.surface === surface);
+    });
+
+    const btnMaster = document.getElementById("btn-master-mute-toggle");
+    const txtMaster = document.getElementById("master-toggle-status");
+    if (btnMaster && txtMaster) {
+      btnMaster.classList.toggle("active", !masterMuted);
+      btnMaster.classList.toggle("muted", !!masterMuted);
+      txtMaster.textContent = masterMuted ? "Audio MUTED" : "Audio ON";
+    }
+
+    const btnMusic = document.getElementById("btn-music-mute-toggle");
+    const txtMusic = document.getElementById("music-toggle-status");
+    if (btnMusic && txtMusic) {
+      btnMusic.classList.toggle("active", !musicMuted);
+      btnMusic.classList.toggle("muted", !!musicMuted);
+      txtMusic.textContent = musicMuted ? "Music MUTED" : "Music ON";
+    }
+
+    const btnSfx = document.getElementById("btn-sfx-mute-toggle");
+    const txtSfx = document.getElementById("sfx-toggle-status");
+    if (btnSfx && txtSfx) {
+      btnSfx.classList.toggle("active", !sfxMuted);
+      btnSfx.classList.toggle("muted", !!sfxMuted);
+      txtSfx.textContent = sfxMuted ? "SFX MUTED" : "SFX ON";
+    }
+
+    const sliderMusic = document.getElementById("slider-music-volume");
+    const txtMusicVol = document.getElementById("music-volume-text");
+    if (sliderMusic && document.activeElement !== sliderMusic) {
+      sliderMusic.value = String(musicVolume);
+    }
+    if (txtMusicVol) {
+      txtMusicVol.textContent = `${Math.round(musicVolume * 100)}%`;
+    }
+
+    const sliderSfx = document.getElementById("slider-sfx-volume");
+    const txtSfxVol = document.getElementById("sfx-volume-text");
+    if (sliderSfx && document.activeElement !== sliderSfx) {
+      sliderSfx.value = String(sfxVolume);
+    }
+    if (txtSfxVol) {
+      txtSfxVol.textContent = `${Math.round(sfxVolume * 100)}%`;
+    }
+  }
+
+
+  // --- Replay Time-Scrubber Timeline Events & Methods ---
+  _bindReplayTimelineEvents() {
+    const btnPlayPause = document.getElementById("btn-replay-playpause");
+    const btnStepBack = document.getElementById("btn-replay-step-back");
+    const btnStepFw = document.getElementById("btn-replay-step-fw");
+    const btnExit = document.getElementById("btn-replay-exit");
+
+    if (btnPlayPause) btnPlayPause.addEventListener("click", () => {
+      if (this.callbacks.onReplayTogglePlayPause) this.callbacks.onReplayTogglePlayPause();
+    });
+    if (btnStepBack) btnStepBack.addEventListener("click", () => {
+      if (this.callbacks.onReplayStep) this.callbacks.onReplayStep(-1.0);
+    });
+    if (btnStepFw) btnStepFw.addEventListener("click", () => {
+      if (this.callbacks.onReplayStep) this.callbacks.onReplayStep(1.0);
+    });
+    if (btnExit) btnExit.addEventListener("click", () => {
+      if (this.callbacks.onToggleReplay) this.callbacks.onToggleReplay();
+    });
+
+    if (this.elReplaySlider) {
+      const handleScrub = () => {
+        const val = parseFloat(this.elReplaySlider.value || "0");
+        if (this.callbacks.onReplayScrub) this.callbacks.onReplayScrub(val);
+      };
+      this.elReplaySlider.addEventListener("input", handleScrub);
+      this.elReplaySlider.addEventListener("change", handleScrub);
+    }
+
+    document.querySelectorAll(".replay-speed-pill").forEach(btn => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll(".replay-speed-pill").forEach(b => b.classList.remove("selected"));
+        btn.classList.add("selected");
+        const speed = parseFloat(btn.dataset.speed || "1.0");
+        if (this.callbacks.onReplaySetSpeed) this.callbacks.onReplaySetSpeed(speed);
+      });
+    });
+  }
+
+  setupReplayTimeline({ duration = 5, markers = [] } = {}) {
+    if (this.elReplaySlider) {
+      this.elReplaySlider.min = "0";
+      this.elReplaySlider.max = String(duration.toFixed(2));
+      this.elReplaySlider.step = "0.05";
+      this.elReplaySlider.value = "0";
+    }
+    if (this.elReplayMarkers) {
+      this.elReplayMarkers.innerHTML = "";
+      markers.forEach(m => {
+        const ratio = Math.max(0, Math.min(1, m.t / (duration || 1)));
+        const dot = document.createElement("div");
+        dot.className = `replay-marker-dot marker-${m.type || "hit"}`;
+        dot.style.left = `${(ratio * 100).toFixed(1)}%`;
+        dot.title = m.label || "Keyframe";
+        this.elReplayMarkers.appendChild(dot);
+      });
+    }
+  }
+
+  updateReplayTimeline({ currentTime = 0, duration = 5, isPaused = false, speed = 1.0 } = {}) {
+    const curSec = Math.max(0, currentTime);
+    const durSec = Math.max(0.1, duration);
+
+    if (this.elReplaySlider && document.activeElement !== this.elReplaySlider) {
+      this.elReplaySlider.value = curSec.toFixed(2);
+    }
+    if (this.elReplayTrackFill) {
+      const pct = Math.max(0, Math.min(100, (curSec / durSec) * 100));
+      this.elReplayTrackFill.style.width = `${pct.toFixed(1)}%`;
+    }
+    if (this.elReplayTimeDisplay) {
+      const fmt = s => {
+        const mins = Math.floor(s / 60);
+        const secs = (s % 60).toFixed(1).padStart(4, "0");
+        return `${String(mins).padStart(2, "0")}:${secs}`;
+      };
+      this.elReplayTimeDisplay.textContent = `${fmt(curSec)} / ${fmt(durSec)}`;
+    }
+    if (this.elReplayPlayPauseIcon) {
+      this.elReplayPlayPauseIcon.textContent = isPaused ? "▶" : "⏸";
+    }
+    document.querySelectorAll(".replay-speed-pill").forEach(btn => {
+      const s = parseFloat(btn.dataset.speed || "1.0");
+      btn.classList.toggle("selected", Math.abs(s - speed) < 0.05);
+    });
+  }
+
+  async openMultiplayerModal() {
+    if (this.elCompanionModal) {
+      if ((!this.currentRoomId || this.currentRoomId === "default") && this.callbacks.onEnsureRoom) try {
+        const t = await this.callbacks.onEnsureRoom();
+        t && t.roomId && (this.currentRoomId = String(t.roomId).toUpperCase());
+      } catch {}
+      try {
+        const t = await fetch(`/api/tunnel/status?room=${encodeURIComponent(this.currentRoomId)}`, { cache: "no-store" });
+        if (t.ok) {
+          const n = await t.json();
+          if (n.tunnelUrl) {
+            this.currentTunnelUrl = n.tunnelUrl;
+            const e = document.getElementById("tunnel-url-input");
+            e && (e.value = n.tunnelUrl);
+          }
+        }
+      } catch {}
+      this.updateMultiplayerRoomInfo({ roomId: this.currentRoomId, tunnelUrl: this.currentTunnelUrl });
+      this.elCompanionModal.classList.remove("hidden");
+    }
+  }
+
+  hideTitleModal() {
+    document.documentElement.classList.add("autoplay-mode");
+    this.elTitleModal && (this.elTitleModal.classList.add("hidden"), this.elTitleModal.style.display = "none");
+  }
+  showTitleModal() {
+    document.documentElement.classList.remove("autoplay-mode");
+    this.elTitleModal && (this.elTitleModal.classList.remove("hidden"), this.elTitleModal.style.display = "flex");
+  }
+  hideVictoryModal() {
+    this.elVictoryModal && this.elVictoryModal.classList.add("hidden");
+  }
+  showVictoryModal({ playerWon: t, playerGames: n, opponentGames: e }) {
+    if (!this.elVictoryModal) return;
+    const i = document.getElementById("victory-result-banner"),
+      o = document.getElementById("victory-match-score"),
+      s = document.getElementById("skill-rating-value");
+    i && (i.textContent = t ? "YOU WIN!" : "TRY AGAIN!", i.style.color = t ? "#ffea28" : "#9ad4ff");
+    o && (o.textContent = `Final Games: ${n} - ${e}`);
+    const a = t ? 1145 : 1020;
+    s && (s.textContent = String(a));
+    this._drawSkillGraph(t);
+    this.elVictoryModal.classList.remove("hidden");
+  }
+
+  _drawSkillGraph(t) {
+    const n = document.getElementById("skill-graph-canvas");
+    if (!n) return;
+    const e = n.getContext("2d"), i = n.width, o = n.height;
+    e.clearRect(0, 0, i, o), e.fillStyle = "#f8fbff", e.fillRect(0, 0, i, o), e.strokeStyle = "#d0dce8", e.lineWidth = 1;
+    for (let p = 25; p < o; p += 35) e.beginPath(), e.moveTo(0, p), e.lineTo(i, p), e.stroke();
+    const s = o * .56;
+    e.strokeStyle = "#9aaab8", e.setLineDash([4, 4]), e.beginPath(), e.moveTo(0, s), e.lineTo(i, s), e.stroke(), e.setLineDash([]);
+    e.fillStyle = "#6c7c8c", e.font = "bold 11px sans-serif", e.fillText("PRO 1000", 8, s - 5);
+    const a = t ? [.74, .66, .58, .45, .24] : [.74, .66, .58, .52, .55];
+    e.strokeStyle = "#1f96f2", e.lineWidth = 3.5, e.lineCap = "round", e.lineJoin = "round", e.beginPath();
+    a.forEach((p, g) => {
+      const y = 24 + g / (a.length - 1) * (i - 48), f = o * p;
+      g === 0 ? e.moveTo(y, f) : e.lineTo(y, f);
+    });
+    e.stroke();
+    const r = i - 24, m = o * a[a.length - 1];
+    e.fillStyle = "#ffea28", e.beginPath(), e.arc(r, m, 6, 0, Math.PI * 2), e.fill(), e.strokeStyle = "#006cc4", e.lineWidth = 2.5, e.stroke();
+  }
+
+  configureGameBubbles(t = 2) {
+    [this.elGamesPlayer, this.elGamesOpponent].forEach(n => {
+      if (!n) return;
+      n.querySelectorAll(".game-bubble").forEach((i, o) => {
+        o < Math.max(1, t) ? i.classList.remove("hidden") : i.classList.add("hidden");
+      });
+    });
+  }
+
+  updateScoreboard({ playerScoreText: t = "00", opponentScoreText: n = "00", deuceLabel: e = null, playerGames: i = 0, opponentGames: o = 0, gamesToWin: s = 2 }) {
+    this.elScoreCenter && (e ? (this.elScoreCenter.classList.add("deuce-mode"), this.elScorePlayer.textContent = e, this.elScoreSep.classList.add("hidden"), this.elScoreOpponent.classList.add("hidden")) : (this.elScoreCenter.classList.remove("deuce-mode"), this.elScorePlayer.textContent = t, this.elScoreSep.classList.remove("hidden"), this.elScoreOpponent.classList.remove("hidden"), this.elScoreOpponent.textContent = n), this.configureGameBubbles(s), this.elGamesPlayer && this.elGamesPlayer.querySelectorAll(".game-bubble").forEach((r, m) => r.classList.toggle("won", m < i)), this.elGamesOpponent && this.elGamesOpponent.querySelectorAll(".game-bubble").forEach((r, m) => r.classList.toggle("won", m < o)));
+  }
+
+  updateServerTag(t, n) {
+    if (!this.elServerTag) return;
+    if (!n || !t || !t.visible) { this.elServerTag.classList.add("hidden"); return; }
+    this.elServerTag.classList.remove("hidden");
+    const e = Math.max(80, Math.min(window.innerWidth - 80, t.x)), i = Math.max(95, Math.min(window.innerHeight - 90, t.y));
+    this.elServerTag.style.left = `${e.toFixed(1)}px`, this.elServerTag.style.top = `${i.toFixed(1)}px`;
+  }
+
+  updatePlayerNameplate(t, n) {
+    if (!this.elPlayerNameplate) return;
+    if (!n || !t || !t.visible) { this.elPlayerNameplate.classList.add("hidden"); return; }
+    this.elPlayerNameplate.classList.remove("hidden");
+    const e = Math.max(90, Math.min(window.innerWidth - 90, t.x)), i = Math.max(120, Math.min(window.innerHeight - 50, t.y));
+    this.elPlayerNameplate.style.left = `${e.toFixed(1)}px`, this.elPlayerNameplate.style.top = `${i.toFixed(1)}px`;
+  }
+
+  showTimingPopup({ grade: t = "PERFECT", detail: n = "POWER TOPSPIN \u2022 176 KM/H", screenPos: e = null, durationMs: i = 1100 }) {
+    if (this.elTimingPopup) {
+      if (this.timingPopupTimer && clearTimeout(this.timingPopupTimer), this.elTimingGrade.textContent = t, this.elTimingGrade.className = "timing-grade", t.includes("EARLY") ? this.elTimingGrade.classList.add("grade-early") : t.includes("LATE") ? this.elTimingGrade.classList.add("grade-late") : this.elTimingGrade.classList.add("grade-perfect"), this.elTimingDetail.textContent = n, e && e.visible) {
+        const o = Math.max(110, Math.min(window.innerWidth - 110, e.x)), s = Math.max(110, Math.min(window.innerHeight - 120, e.y));
+        this.elTimingPopup.style.left = `${o.toFixed(1)}px`, this.elTimingPopup.style.top = `${s.toFixed(1)}px`;
+      } else this.elTimingPopup.style.left = "50%", this.elTimingPopup.style.top = "54%";
+      this.elTimingPopup.classList.remove("hidden"), i > 0 && (this.timingPopupTimer = setTimeout(() => { this.elTimingPopup.classList.add("hidden"); }, i));
+    }
+  }
+
+  showCenterBanner(t, { style: n = "style-gold", subText: e = "", durationMs: i = 1500, persistent: o = !1 } = {}) {
+    !this.elBannerLayer || !this.elBannerText || (this.bannerTimer && (clearTimeout(this.bannerTimer), this.bannerTimer = null), this.elBannerText.textContent = t, this.elBannerText.className = `center-banner-text ${n}`, this.elBannerSub && (e ? (this.elBannerSub.textContent = e, this.elBannerSub.classList.remove("hidden")) : this.elBannerSub.classList.add("hidden")), this.elBannerLayer.classList.remove("hidden"), !o && i > 0 && (this.bannerTimer = setTimeout(() => { this.hideCenterBanner(); }, i)));
+  }
+
+  hideCenterBanner() {
+    this.bannerTimer && (clearTimeout(this.bannerTimer), this.bannerTimer = null), this.elBannerLayer && this.elBannerLayer.classList.add("hidden");
+  }
+
+  setReplayMode(t) {
+    document.body.classList.toggle("replay-mode", !!t);
+    this.elReplayBadge && this.elReplayBadge.classList.toggle("hidden", !t);
+    this.elReplayTimeline && this.elReplayTimeline.classList.toggle("hidden", !t);
+  }
+
+  setActiveShotChip(t) {}
+
+  updateTimingGauge({ cursorNormalized: t = .5, modeTitle: n = "SWING TIMING", speedText: e = "READY" }) {
+    if (this.elTimingCursor) {
+      const i = Math.max(4, Math.min(96, t * 100));
+      this.elTimingCursor.style.left = `${i.toFixed(1)}%`;
+    }
+    this.elGaugeModeTitle && (this.elGaugeModeTitle.textContent = n), this.elGaugeSpeedReadout && (this.elGaugeSpeedReadout.textContent = e);
+  }
+
+  updateAudioStatus({ playing: t, trackName: n }) {
+    this.elAudioDot && this.elAudioDot.classList.toggle("music-on", !!t), this.elAudioLabel && (this.elAudioLabel.textContent = t ? `Lyria: ${n || "Sunny Rally"}` : "Lyria: Muted");
+  }
+
+  updateCameraLabel(t) {
+    this.elCameraLabel && (this.elCameraLabel.textContent = t);
+  }
+
+  updateMotionStatus({ webcamActive: t = !1, phoneConnected: n = !1, p1Phone: e = !1, p2Phone: i = !1 }) {
+    this.elWebcamPip && this.elWebcamPip.classList.toggle("hidden", !t), this.elWebcamDot && this.elWebcamDot.classList.toggle("active", !!t), this.elPhoneDot && this.elPhoneDot.classList.toggle("active", !!(n || e || i)), this.elPhoneLabel && (e && i ? this.elPhoneLabel.textContent = "P1 & P2 Rackets" : n || e || i ? this.elPhoneLabel.textContent = "Racket Connected" : this.elPhoneLabel.textContent = "Pocket Racket");
+  }
+
+  updateMultiplayerRoomInfo(t = {}) {
+    const n = { ...this._lastRoomStatus || {}, ...t };
+    if (this._lastRoomStatus = n, n.roomId) {
+      const d = String(n.roomId).trim();
+      this.currentRoomId = !d || d.toLowerCase() === "default" ? "default" : d.toUpperCase();
+    }
+    if (n.role && (this.playerRole = String(n.role).toLowerCase() === "p2" ? "p2" : "p1"), n.tunnelUrl) {
+      this.currentTunnelUrl = String(n.tunnelUrl).replace(/\/+$/, "");
+      const d = document.getElementById("tunnel-url-input");
+      d && document.activeElement !== d && (d.value = this.currentTunnelUrl);
+    }
+    const e = this.playerRole === "p2",
+      i = document.getElementById("mp-card-p1"),
+      o = document.getElementById("mp-card-p2"),
+      s = document.getElementById("mp-gchat-invite-box"),
+      a = document.getElementById("btn-create-1v1-room");
+    i && i.classList.toggle("hidden", e), o && o.classList.toggle("hidden", !e), s && s.classList.toggle("hidden", e), a && a.classList.toggle("hidden", e);
+    const r = document.getElementById("companion-room-badge");
+    r && (r.textContent = this.currentRoomId === "default" ? "PAIRING…" : `ROOM #${this.currentRoomId.toUpperCase()} \u2022 ${e ? "PLAYER 2" : "PLAYER 1"}`);
+    const m = encodeURIComponent(this.currentRoomId),
+      p = (this.currentTunnelUrl || window.location.origin).replace(/\/+$/, ""),
+      g = `${p}/companion.html?room=${m}&role=p1`,
+      y = `${p}/companion.html?room=${m}&role=p2`,
+      f = document.getElementById("companion-link");
+    f && (f.href = g);
+    const I = document.getElementById("companion-link-p2");
+    I && (I.href = y);
+    const b = document.getElementById("companion-qr");
+    if (b) {
+      const d = this.currentRoomId !== "default" ? `/api/qr.svg?room=${m}&role=p1` : "https://www.gstatic.com/aistudio/starter-apps/tennis/qr/player1_qr.png";
+      b.dataset.lastSrc !== d && (b.src = d, b.dataset.lastSrc = d);
+    }
+    const B = document.getElementById("companion-qr-p2");
+    if (B) {
+      const d = this.currentRoomId !== "default" ? `/api/qr.svg?room=${m}&role=p2` : "https://www.gstatic.com/aistudio/starter-apps/tennis/qr/player2_qr.png";
+      B.dataset.lastSrc !== d && (B.src = d, B.dataset.lastSrc = d);
+    }
+    const T = document.getElementById("court-link-p1");
+    T && (T.href = `/?room=${m}&role=p1`);
+    const l = document.getElementById("court-link-p2");
+    l && (l.href = `/?room=${m}&role=p2`);
+    const c = document.getElementById("mp-p1-status");
+    if (c) {
+      const d = !!(n.p1Phone || n.p1Online);
+      c.textContent = n.p1Phone ? "Connected \u2713" : d ? "Court Ready" : "Scan QR", c.classList.toggle("online", !!n.p1Phone);
+    }
+    const u = document.getElementById("mp-p2-status");
+    if (u) {
+      const d = !!(n.p2Phone || n.p2Online);
+      u.textContent = n.p2Phone ? "Connected \u2713" : d ? "Court Ready" : "Scan QR", u.classList.toggle("online", !!n.p2Phone);
+    }
+    const h = document.getElementById("mp-active-status");
+    if (h) {
+      const d = e ? !!n.p2Phone : !!n.p1Phone;
+      h.textContent = d ? "Connected \u2713" : "Scan QR", h.classList.toggle("online", d);
+    }
+    this.updateOpponentPresence(n);
+  }
+
+  updateOpponentPresence(t = {}) {
+    const n = !!(t.isMultiplayer || this.selectedDifficulty === "1v1"),
+      e = document.querySelector(".mii-side-opponent .mii-avatar-badge:not(.secondary-mii)");
+    if (!n) {
+      this.elOpponentPresencePill && this.elOpponentPresencePill.classList.add("hidden"), e && e.classList.remove("opponent-ready"), this._lastOtherReady = !1;
+      return;
+    }
+    const i = t.hostName && t.hostName.trim() ? t.hostName.trim() : "Player 1",
+      o = t.guestName && t.guestName.trim() ? t.guestName.trim() : "Player 2",
+      s = this.playerRole === "p2";
+    let a = !1, r = "";
+    s ? (a = !!(t.p2Phone || t.p1Phone || t.p1Online), t.p2Phone ? r = `Racket Ready \u2022 ${i} Joined` : t.p1Phone || t.p1Online ? r = `${i} Ready \u2022 Scan QR for Phone Racket` : r = `Waiting for ${i}\u2026`) : (a = !!(t.p2Phone || t.p2Online), t.p2Phone && t.p2Online ? r = `${o} Connected \u2022 Ready to Serve!` : t.p2Phone ? r = `${o}'s Racket Ready \u2022 Ready to Serve!` : t.p2Online ? r = `${o} Joined \u2022 Ready to Serve!` : r = `Waiting for ${o}\u2026`), this.elOpponentPresencePill && (this.elOpponentPresencePill.classList.remove("hidden"), this.elOpponentPresencePill.classList.toggle("ready", a), this.elOpponentPresencePill.classList.toggle("in-rally", !!t.inRally), a && !this._lastOtherReady && (this.elOpponentPresencePill.classList.remove("just-joined"), this.elOpponentPresencePill.offsetWidth, this.elOpponentPresencePill.classList.add("just-joined"), this._justJoinedTimer && clearTimeout(this._justJoinedTimer), this._justJoinedTimer = setTimeout(() => { this.elOpponentPresencePill && this.elOpponentPresencePill.classList.remove("just-joined"); }, 950))), this.elOpponentPresenceText && (this.elOpponentPresenceText.textContent = r), e && e.classList.toggle("opponent-ready", a);
+    const m = document.getElementById("setup-opponent-label");
+    m && this.selectedDifficulty === "1v1" && !s && (m.textContent = a ? `\u{1F7E2} ${o} Ready` : o), this._lastOtherReady = a;
+  }
+}
+

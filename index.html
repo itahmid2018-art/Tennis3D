@@ -1,0 +1,114 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" /><meta name="description" content="Wii Sports-inspired 3D arcade tennis game with frantic racket kinematics, expressive Mii characters, webcam &amp; phone motion controls, and Lyria 3 audio." /><title>Argon Tennis</title><script>
+    (function () {
+      const params = new URLSearchParams(window.location.search);
+      if (params.has('play') || params.has('state')) {
+        document.documentElement.classList.add('autoplay-mode');
+      }
+      const stateParam = (params.get('state') || '').toLowerCase();
+      if (stateParam) {
+        document.documentElement.setAttribute('data-url-state', stateParam);
+      }
+    })();
+  </script><link rel="stylesheet" href="./styles.css" /></head><body><div id="root" class="hidden" aria-hidden="true"></div><div id="canvas-container" aria-label="Argon Tennis 3D Stadium Viewport"><canvas id="game-canvas"></canvas></div><div id="hud-root"><header id="top-hud-bar"><div id="games-pill-player" class="wii-games-pill" title="Player Games Won"><span class="game-bubble" data-slot="0"></span><span class="game-bubble" data-slot="1"></span><span class="game-bubble extra-slot hidden" data-slot="2"></span></div><div id="scoreboard-pill" class="wii-scoreboard-pill"><div class="mii-side mii-side-player"><div class="mii-avatar-badge player-tint"><canvas id="mii-icon-player" width="192" height="192"></canvas></div><div class="mii-avatar-badge player-tint secondary-mii"><canvas id="mii-icon-player-2" width="192" height="192"></canvas></div></div><div id="score-center-display" class="score-center-display"><span id="score-player-text" class="score-digits">00</span><span id="score-separator" class="score-dash">-</span><span id="score-opponent-text" class="score-digits">00</span></div><div class="mii-side mii-side-opponent"><div class="mii-avatar-badge opponent-tint secondary-mii"><canvas id="mii-icon-opponent-2" width="192" height="192"></canvas></div><div class="mii-avatar-badge opponent-tint"><canvas id="mii-icon-opponent" width="192" height="192"></canvas></div></div></div><div id="games-pill-opponent" class="wii-games-pill" title="Opponent Games Won"><span class="game-bubble" data-slot="0"></span><span class="game-bubble" data-slot="1"></span><span class="game-bubble extra-slot hidden" data-slot="2"></span></div></header><div id="opponent-presence-pill" class="opponent-presence-pill hidden" aria-live="polite"><span id="opponent-presence-dot" class="presence-dot"></span><span id="opponent-presence-text">Waiting for Player 2…</span></div><div id="world-labels-layer"><div id="server-tag" class="wii-server-tag hidden"><span class="server-tag-text">Server</span></div><div id="player-nameplate" class="wii-court-nameplate player-plate hidden"><canvas id="plate-mii-player" width="192" height="192"></canvas><div class="plate-info"><div class="plate-name">Ammaar</div><div class="plate-skill">Skill Level 1050</div></div></div><div id="timing-popup" class="wii-timing-popup hidden"><span id="timing-popup-grade" class="timing-grade">PERFECT</span><span id="timing-popup-detail" class="timing-detail">POWER TOPSPIN • 178 KM/H</span></div></div><div id="center-banner-layer" class="center-banner-layer hidden"><div id="center-banner-streak" class="center-banner-streak"></div><div id="center-banner-text" class="center-banner-text style-gold">Game Point</div><div id="center-banner-sub" class="center-banner-sub hidden"></div></div><div id="replay-badge" class="wii-replay-badge hidden"><span class="replay-dots"><i class="dot dot-1"></i><i class="dot dot-2"></i><i class="dot dot-3"></i></span><span class="replay-label">Replay</span></div><div id="bottom-right-dock" class="hud-corner-dock bottom-right-dock"><div id="timing-gauge-card" class="timing-gauge-card"><div class="gauge-header"><span id="gauge-mode-title">SWING TIMING</span><span id="gauge-speed-readout">READY</span></div><div class="timing-bar-track"><div class="timing-zone zone-early">EARLY (Cross)</div><div class="timing-zone zone-sweet">SWEET SPOT</div><div class="timing-zone zone-late">LATE (Line)</div><div id="timing-cursor" class="timing-cursor" style="left: 50%;"></div></div></div><div class="motion-controls-row"><div id="webcam-pip-card" class="webcam-pip-card hidden"><video id="webcam-video" autoplay playsinline muted></video><canvas id="webcam-canvas" width="160" height="120"></canvas><div class="pip-badge"><span class="pip-live-dot"></span><span id="pip-motion-label">Webcam Swing</span></div></div><div class="motion-buttons-col"><button id="btn-webcam-toggle" class="hud-mini-btn motion-btn" type="button"><span class="btn-dot" id="webcam-status-dot"></span><span>Webcam Motion</span></button><button id="btn-phone-racket" class="hud-mini-btn motion-btn" type="button"><span class="btn-dot" id="phone-status-dot"></span><span id="phone-status-label">Pocket Racket</span></button><div id="bottom-left-dock" class="hud-corner-dock bottom-left-dock"><div class="dock-pill-row"><button id="btn-audio-toggle" class="hud-mini-btn" type="button" title="Toggle Lyria 3 Soundtrack & SFX"><span class="btn-dot music-on" id="audio-status-dot"></span><span id="audio-track-label">Lyria: Sunny Rally</span></button><button id="btn-audio-settings" class="hud-mini-btn" type="button" title="Audio & Court Surface Settings"><span>🔊 Sound & Surface</span></button><button id="btn-camera-cycle" class="hud-mini-btn" type="button" title="Cycle Camera Angle (C)"><span>Cam:</span><strong id="camera-mode-label">Rally</strong></button><button id="btn-replay-trigger" class="hud-mini-btn" type="button" title="Toggle Instant Replay (R)"><span>Replay</span></button><button id="btn-racket-modal" class="hud-mini-btn" type="button" title="Customize Racket Colors & Textures"><span>🎨 Racket</span></button><button id="btn-multiplayer-modal" class="hud-mini-btn hidden" type="button" title="Open /argontennis 1v1 Multiplayer & Cloudflare Companion Links"><span>💬 /argontennis 1v1</span></button></div></div></div></div></div></div>
+
+<div id="audio-settings-modal" class="wii-modal-backdrop hidden">
+  <div class="wii-dialog-box audio-settings-dialog">
+    <div class="audio-dialog-header">
+      <h2 class="dialog-title">🔊 Sound & Court Surface</h2>
+      <span class="audio-subtitle">Bifurcated Audio & Surface Physics</span>
+    </div>
+
+    <div class="audio-options-scroll">
+      <!-- Court Surface Selection Section -->
+      <div class="custom-option-group">
+        <label class="custom-label">🎾 Court Surface & Acoustics:</label>
+        <div class="court-surface-row" id="court-surface-group">
+          <button type="button" class="surface-choice selected" data-surface="grass">
+            <span class="surf-icon">🌿</span>
+            <span class="surf-name">Grass Court</span>
+            <span class="surf-desc">Soft plush bounce • Turf scuff</span>
+          </button>
+          <button type="button" class="surface-choice" data-surface="clay">
+            <span class="surf-icon">🧱</span>
+            <span class="surf-name">Clay Court</span>
+            <span class="surf-desc">Crunchy grit bounce • Clay skid</span>
+          </button>
+          <button type="button" class="surface-choice" data-surface="hard">
+            <span class="surf-icon">🟦</span>
+            <span class="surf-name">Hard Court</span>
+            <span class="surf-desc">Crisp pop bounce • Shoe squeak</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Master Audio Toggle -->
+      <div class="custom-option-group audio-toggle-group">
+        <div class="toggle-label-wrap">
+          <span class="toggle-icon">🔊</span>
+          <div class="toggle-text">
+            <strong class="toggle-title">Master Sound System</strong>
+            <span class="toggle-sub">Mute or enable all application audio</span>
+          </div>
+        </div>
+        <button id="btn-master-mute-toggle" type="button" class="audio-toggle-btn active">
+          <span id="master-toggle-status">Audio ON</span>
+        </button>
+      </div>
+
+      <!-- Bifurcated Music (BGM) Controls -->
+      <div class="custom-option-group audio-bifurcated-card">
+        <div class="bifurcated-header">
+          <div class="toggle-label-wrap">
+            <span class="toggle-icon">🎵</span>
+            <div class="toggle-text">
+              <strong class="toggle-title">Background Music (Lyria 3)</strong>
+              <span class="toggle-sub">Soundtrack & match fanfare atmosphere</span>
+            </div>
+          </div>
+          <button id="btn-music-mute-toggle" type="button" class="audio-toggle-btn active">
+            <span id="music-toggle-status">Music ON</span>
+          </button>
+        </div>
+        <div class="volume-slider-row">
+          <span class="slider-min">0%</span>
+          <input id="slider-music-volume" type="range" min="0" max="1" step="0.05" value="0.65" class="wii-audio-slider" aria-label="Music Volume" />
+          <span id="music-volume-text" class="slider-max">65%</span>
+        </div>
+      </div>
+
+      <!-- Bifurcated Court SFX & Audio Effects -->
+      <div class="custom-option-group audio-bifurcated-card">
+        <div class="bifurcated-header">
+          <div class="toggle-label-wrap">
+            <span class="toggle-icon">👟</span>
+            <div class="toggle-text">
+              <strong class="toggle-title">Court Audio Effects & SFX</strong>
+              <span class="toggle-sub">Surface footsteps, ball bounces, racket hits & TTS</span>
+            </div>
+          </div>
+          <button id="btn-sfx-mute-toggle" type="button" class="audio-toggle-btn active">
+            <span id="sfx-toggle-status">SFX ON</span>
+          </button>
+        </div>
+        <div class="volume-slider-row">
+          <span class="slider-min">0%</span>
+          <input id="slider-sfx-volume" type="range" min="0" max="1" step="0.05" value="0.85" class="wii-audio-slider" aria-label="Court SFX Volume" />
+          <span id="sfx-volume-text" class="slider-max">85%</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="dialog-actions">
+      <button id="btn-close-audio-modal" type="button" class="wii-pill-btn">Done 🔊</button>
+    </div>
+  </div>
+</div>
+
+<div id="replay-timeline-container" class="replay-timeline-container hidden"><div class="replay-timeline-inner"><div class="replay-controls-group"><button id="btn-replay-playpause" type="button" class="replay-ctrl-btn" title="Play / Pause Replay"><span id="replay-playpause-icon">⏸</span></button><button id="btn-replay-step-back" type="button" class="replay-ctrl-btn mini-ctrl" title="Step Back 1s">⏪</button><button id="btn-replay-step-fw" type="button" class="replay-ctrl-btn mini-ctrl" title="Step Forward 1s">⏩</button><span id="replay-time-display" class="replay-time-text">00:00.0 / 00:00.0</span></div><div class="replay-scrubber-wrapper"><div id="replay-timeline-track" class="replay-timeline-track"><div id="replay-timeline-fill" class="replay-timeline-fill" style="width: 0%;"></div><div id="replay-timeline-markers" class="replay-timeline-markers"></div><input id="replay-timeline-slider" type="range" min="0" max="100" step="0.1" value="0" class="replay-range-input" aria-label="Replay Time Scrubber" /></div></div><div class="replay-speed-group"><span class="replay-speed-label">Speed:</span><button type="button" class="replay-speed-pill" data-speed="0.25">0.25x</button><button type="button" class="replay-speed-pill" data-speed="0.5">0.5x</button><button type="button" class="replay-speed-pill selected" data-speed="1.0">1.0x</button><button type="button" class="replay-speed-pill" data-speed="2.0">2.0x</button></div><button id="btn-replay-exit" type="button" class="replay-exit-btn" title="Exit Replay Mode">✕ Exit</button></div></div>
+
+<div id="title-modal" class="wii-modal-backdrop"><div class="wii-title-card"><div class="wii-logo-header"><h1 class="argon-logo-title"><span class="logo-word-argon">Argon</span><span class="logo-word-tennis">Tennis</span></h1></div><div class="court-preview-diagram"><div class="mini-court-turf"><div class="mini-court-lines"><div class="mini-net-line"></div><div class="mini-service-box top"></div><div class="mini-service-box bottom"></div></div><div class="court-slot-marker opponent-marker"><canvas id="setup-mii-opponent" width="192" height="192"></canvas><div id="setup-opponent-label" class="slot-tag cpu-tag">Club AI</div></div><div class="court-slot-marker player-marker"><canvas id="setup-mii-player" width="192" height="192"></canvas><div class="slot-tag you-tag">You</div></div></div></div><div class="setup-section"><div class="wii-green-btn-row" id="difficulty-mode-group"><button type="button" class="wii-green-choice selected" data-difficulty="casual"><span class="choice-main">Casual AI</span></button><button type="button" class="wii-green-choice" data-difficulty="pro"><span class="choice-main">Pro AI</span></button><button type="button" class="wii-green-choice" data-difficulty="1v1"><span class="choice-main">1v1 Match</span></button></div></div><div class="setup-section" id="match-length-section"><div class="wii-green-btn-row" id="match-length-group"><button type="button" class="wii-green-choice" data-games="1"><span class="choice-main">1 Game</span></button><button type="button" class="wii-green-choice selected" data-games="3"><span class="choice-main">Best of 3</span></button><button type="button" class="wii-green-choice" data-games="5"><span class="choice-main">Best of 5</span></button></div></div><div class="wii-modal-actions"><button id="btn-start-match" type="button" class="wii-ok-btn"><span class="hand-cursor-icon">🎾</span><span>Start Match</span></button><button id="btn-title-customize-racket" type="button" class="wii-secondary-action-btn"><span>🎨 Custom Racket</span></button></div></div></div>
+
+<div id="racket-modal" class="wii-modal-backdrop hidden"><div class="wii-dialog-box racket-custom-dialog"><div class="racket-dialog-header"><h2 class="dialog-title">🎨 Racket Workshop</h2><span class="racket-subtitle">Customize Frame, Texture & Strings</span></div><div class="racket-preview-card"><svg class="racket-vector-preview" viewBox="0 0 120 180" xmlns="http://www.w3.org/2000/svg"><g id="racket-svg-group"><ellipse cx="60" cy="55" rx="38" ry="46" fill="none" id="racket-svg-frame" stroke="#0072d6" stroke-width="8" /><path d="M 38 96 L 50 125 L 70 125 L 82 96 Z" fill="none" id="racket-svg-throat" stroke="#0072d6" stroke-width="6" /><rect x="53" y="125" width="14" height="48" rx="4" id="racket-svg-grip" fill="#ffffff" stroke="#222222" stroke-width="2" /><g id="racket-svg-strings" stroke="#ffffff" stroke-width="1.5" opacity="0.85"><line x1="32" y1="55" x2="88" y2="55" /><line x1="36" y1="35" x2="84" y2="35" /><line x1="36" y1="75" x2="84" y2="75" /><line x1="60" y1="18" x2="60" y2="92" /><line x1="45" y1="22" x2="45" y2="88" /><line x1="75" y1="22" x2="75" y2="88" /></g></g></svg><div class="preset-pills-row"><span class="preset-label">Presets:</span><button type="button" class="racket-preset-btn" data-preset="pro_cyan">Pro Cyan</button><button type="button" class="racket-preset-btn" data-preset="crimson_flame">Crimson</button><button type="button" class="racket-preset-btn" data-preset="carbon_stealth">Carbon</button><button type="button" class="racket-preset-btn" data-preset="golden_voltage">Gold</button><button type="button" class="racket-preset-btn" data-preset="violet_dusk">Violet</button></div></div><div class="racket-options-scroll"><div class="custom-option-group"><label class="custom-label">Frame Color:</label><div class="swatch-grid" id="frame-color-swatches"><button type="button" class="swatch-btn selected" data-color="#0072d6" style="background:#0072d6" title="Classic Blue"></button><button type="button" class="swatch-btn" data-color="#00e5ff" style="background:#00e5ff" title="Electric Cyan"></button><button type="button" class="swatch-btn" data-color="#ff3344" style="background:#ff3344" title="Crimson Red"></button><button type="button" class="swatch-btn" data-color="#ffea19" style="background:#ffea19" title="Neon Gold"></button><button type="button" class="swatch-btn" data-color="#1a1a24" style="background:#1a1a24" title="Stealth Carbon"></button><button type="button" class="swatch-btn" data-color="#8a2be2" style="background:#8a2be2" title="Midnight Purple"></button><button type="button" class="swatch-btn" data-color="#00c853" style="background:#00c853" title="Emerald Green"></button><button type="button" class="swatch-btn" data-color="#ffffff" style="background:#ffffff" title="Pure White"></button><button type="button" class="swatch-btn" data-color="#ff7700" style="background:#ff7700" title="Sunset Orange"></button></div></div><div class="custom-option-group"><label class="custom-label">Texture Finish:</label><div class="finish-btn-row" id="finish-mode-group"><button type="button" class="finish-choice selected" data-finish="metallic"><span>Metallic</span></button><button type="button" class="finish-choice" data-finish="matte"><span>Matte</span></button><button type="button" class="finish-choice" data-finish="carbon"><span>Carbon Weave</span></button><button type="button" class="finish-choice" data-finish="stripes"><span>Race Stripes</span></button></div></div><div class="custom-option-group"><label class="custom-label">String Color:</label><div class="swatch-grid" id="string-color-swatches"><button type="button" class="swatch-btn selected" data-color="#ffffff" style="background:#ffffff" title="Bright White"></button><button type="button" class="swatch-btn" data-color="#ffea19" style="background:#ffea19" title="Volt Yellow"></button><button type="button" class="swatch-btn" data-color="#ff007f" style="background:#ff007f" title="Neon Pink"></button><button type="button" class="swatch-btn" data-color="#000000" style="background:#000000" title="Jet Black"></button><button type="button" class="swatch-btn" data-color="#00e5ff" style="background:#00e5ff" title="Electric Blue"></button></div></div><div class="custom-option-group"><label class="custom-label">Grip Color:</label><div class="swatch-grid" id="grip-color-swatches"><button type="button" class="swatch-btn selected" data-color="#ffffff" style="background:#ffffff" title="White Grip"></button><button type="button" class="swatch-btn" data-color="#111111" style="background:#111111" title="Black Grip"></button><button type="button" class="swatch-btn" data-color="#ff3344" style="background:#ff3344" title="Red Grip"></button><button type="button" class="swatch-btn" data-color="#0072d6" style="background:#0072d6" title="Blue Grip"></button><button type="button" class="swatch-btn" data-color="#ffea19" style="background:#ffea19" title="Yellow Grip"></button></div></div></div><div class="dialog-actions"><button id="btn-save-racket" type="button" class="wii-pill-btn">Apply & Save 🎾</button><button id="btn-close-racket-modal" type="button" class="wii-pill-btn secondary-pill">Close</button></div></div></div><div id="companion-modal" class="wii-modal-backdrop hidden"><div class="wii-dialog-box wii-companion-clean-dialog"><div class="mp-dialog-header"><h2 class="dialog-title">📱 Phone Controller</h2><span id="mp-active-status" class="mp-conn-tag">Scan QR</span></div><p class="dialog-desc">Scan with your phone camera <span id="companion-room-badge" class="mp-conn-tag">ROOM</span></p><div id="mp-card-p1" class="mp-clean-qr-wrap"><span id="mp-p1-status" class="hidden"></span><img id="companion-qr" src="https://www.gstatic.com/aistudio/starter-apps/tennis/qr/player1_qr.png" alt="Phone Controller QR" width="200" height="200" class="mp-qr-img" /><a id="companion-link" href="/companion.html?room=default&role=p1" target="_blank" rel="noopener" class="mp-subtle-link">Open controller link ↗</a></div><div id="mp-card-p2" class="mp-clean-qr-wrap hidden"><span id="mp-p2-status" class="hidden"></span><img id="companion-qr-p2" src="https://www.gstatic.com/aistudio/starter-apps/tennis/qr/player2_qr.png" alt="Phone Controller QR" width="200" height="200" class="mp-qr-img" /><a id="companion-link-p2" href="/companion.html?room=default&role=p2" target="_blank" rel="noopener" class="mp-subtle-link">Open controller link ↗</a></div><div class="dialog-actions"><button id="btn-close-companion" type="button" class="wii-pill-btn">Back to Court</button></div></div></div><div id="victory-modal" class="wii-modal-backdrop hidden"><div class="wii-skill-card"><div class="skill-card-header">Club Skill Rating</div><div class="skill-card-body"><div class="skill-chart-frame"><canvas id="skill-graph-canvas" width="280" height="200"></canvas></div><div class="skill-mii-summary"><div id="victory-result-banner" class="victory-result-banner">YOU WIN!</div><div class="skill-score-pill"><canvas id="victory-mii-icon" width="192" height="192"></canvas><div class="skill-score-meta"><div class="skill-rating-number" id="skill-rating-value">1120</div><div class="skill-player-name">Ammaar (+120)</div></div></div><div id="victory-match-score" class="victory-match-score">Final Games: 2 - 0</div></div></div><div class="skill-card-footer"><button id="btn-play-again" type="button" class="wii-footer-btn primary">Play again</button><button id="btn-return-title" type="button" class="wii-footer-btn secondary">Menu</button></div></div></div><script type="module">
+    import { renderAllHudMiiAvatars } from './src/mii_avatars.js';
+    renderAllHudMiiAvatars();
+  </script><script type="module" src="./src/game_engine.js"></script></body></html>
